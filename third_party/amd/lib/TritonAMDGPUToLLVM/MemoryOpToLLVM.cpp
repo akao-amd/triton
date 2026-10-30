@@ -652,6 +652,15 @@ public:
       else if (!localBarrier && globalBarrier)
         mmraAddrSpace = "global";
 
+      // gfx1250: wait for this wave's LDS operations before the barrier
+      // explicitly. The release fence below should make LLVM emit that wait
+      // before s_barrier_signal, but LLVM before llvm/llvm-project#220357
+      // drops it when the barrier is at the top of a loop whose previous
+      // iteration left LDS operations in flight: a wave can then still be
+      // reading LDS while the waves the barrier released overwrite it.
+      if (localBarrier && targetInfo.getISAFamily() == ISAFamily::GFX1250)
+        ROCDL::WaitDscntOp::create(rewriter, op->getLoc(), 0);
+
       // Local/global barriers use LLVM fences so the AMDGPU memory legalizer
       // selects target-specific waits. Mixed local+global barriers are left
       // untagged so LLVM conservatively synchronizes every relevant space.
